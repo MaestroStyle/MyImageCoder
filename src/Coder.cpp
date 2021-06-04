@@ -9,112 +9,143 @@ Coder::Coder(int block_size, int comp_diff_max, int diff_max){
 void Coder::setBlockSize(int size){
     _block_side_size = size;
 }
-int Coder::getBlockSize(){
+int Coder::getBlockSize() const{
     return _block_side_size;
 }
 void Coder::setCompDiffMax(int comp_diff_max){
     _comp_diff_max = comp_diff_max;
 }
-int Coder::getCompDiffMax(){
+int Coder::getCompDiffMax() const {
     return _comp_diff_max;
 }
 void Coder::setDiffMax(int diff_max){
     _diff_max = diff_max;
 }
-int Coder::getDiffMax(){
+int Coder::getDiffMax() const {
     return _diff_max;
 }
-string Coder::encode(const Mat& img){
+string Coder::encode(const Mat& img) const {
     cout << "encode" << endl;
     stringstream buf;
 
     _writeInt(buf, img.rows);
     _writeInt(buf, img.cols);
 
-//    int width = cols % _block_side_size;
-    Mat copy_img = img.clone();
-    for(int y = 0; y <= img.rows - _block_side_size; y += _block_side_size)
+    int width_corner_block = img.cols % _block_side_size;
+    int height_corner_block = img.rows % _block_side_size;
+//    Mat copy_img = img.clone();
+    for(int y = 0; y <= img.rows - _block_side_size; y += _block_side_size){
         for(int x = 0; x <= img.cols - _block_side_size; x += _block_side_size){
             Mat block = img(Range(y, y + _block_side_size), Range(x, x + _block_side_size));
-            if(_isContinuousTone(block)){
-                _writeBlockType(buf, BlockType::SingleTone);
-
-#ifdef JPEG
-                string data = _jpegEncode(block);
-                int length_block = static_cast<int>(data.length());
-                _writeInt(buf, length_block);
-                buf << data;
-#else
-                Scalar color = _calcMeanPixValue(block);
-                _writeColor(buf, color);
-#endif
-
-                copy_img(Range(y, y + _block_side_size), Range(x, x + _block_side_size)) = Scalar(0, 0, 255);
-            }
-            else {
-#ifdef DEFLATE
-                _writeBlockType(buf, BlockType::Rle);
-                string data = _deflateEncode(block);
-                int length_block = static_cast<int>(data.length());
-                _writeInt(buf, length_block);
-                buf << data;
-#else
-                _writeBlockType(buf, BlockType::Rle);
-                string data = _rleEncode(block);
-                int length_block = static_cast<int>(data.length());
-                _writeInt(buf, length_block);
-                buf << data;
-#endif
-//                if(img.cols /_block_side_size != 0){
-
-//                    for(int y = 0; y < )
-//                }
-            }
+            _encodeBlock(buf, block);
         }
-#ifdef RESIZE
-    resize(copy_img, copy_img,Size(200, 200), 0, 0, INTER_AREA);
-#endif
-    imshow("continuous blocks", copy_img);
-    waitKey();
-    destroyAllWindows();
+        if(width_corner_block != 0){
+            Mat block = img(Range(y, y + _block_side_size), Range(img.cols - width_corner_block, img.cols));
+            _encodeBlock(buf, block);
+        }
+    }
+    if(height_corner_block != 0){
+        for(int x = 0; x <= img.cols - _block_side_size; x += _block_side_size){
+            Mat block = img(Range(img.rows - height_corner_block, img.rows), Range(x, x + _block_side_size));
+            _encodeBlock(buf, block);
+        }
+        if(width_corner_block != 0){
+            Mat block = img(Range(img.rows - height_corner_block, img.rows), Range(img.cols - width_corner_block, img.cols));
+            _encodeBlock(buf, block);
+        }
+    }
+//#ifdef RESIZE
+//    resize(copy_img, copy_img,Size(200, 200), 0, 0, INTER_AREA);
+//#endif
+//    imshow("continuous blocks", copy_img);
+//    waitKey();
+//    destroyAllWindows();
     return buf.str();
 }
-Mat Coder::decode(const string& comp_data){
+Mat Coder::decode(const string& comp_data) const {
     stringstream buf(comp_data);
     int rows = _readInt(buf);
     int cols = _readInt(buf);
 
     Mat img(rows, cols, CV_8UC3);
-    for(int y = 0; y <= img.rows - _block_side_size; y += _block_side_size)
+    int width_corner_block = img.cols % _block_side_size;
+    int height_corner_block = img.rows % _block_side_size;
+    for(int y = 0; y <= img.rows - _block_side_size; y += _block_side_size){
         for(int x = 0; x <= img.cols - _block_side_size; x += _block_side_size){
             Mat block = img(Range(y, y + _block_side_size), Range(x, x + _block_side_size));
-
-            BlockType type = _readBlockType(buf);
-            if(type == BlockType::SingleTone){
-#ifdef JPEG
-                int length_block = _readInt(buf);
-                string data = _readData(buf, length_block);
-                _jpegDecode(data, block);
-#else
-                block = _readColor(buf);
-#endif
-            }
-            else {
-#ifdef DEFLATE
-                int length_block = _readInt(buf);
-                string data = _readData(buf, length_block);
-                _deflateDecode(data, block);
-#else
-                int length_block = _readInt(buf);
-                string data = _readData(buf, length_block);
-                _rleDecode(data, block);
-#endif
-
-            }
+            _decodeBlock(buf, block);
         }
+        if(width_corner_block != 0){
+            Mat block = img(Range(y, y + _block_side_size), Range(img.cols - width_corner_block, img.cols));
+            _decodeBlock(buf, block);
+        }
+    }
+    if(height_corner_block != 0){
+        for(int x = 0; x <= img.cols - _block_side_size; x += _block_side_size){
+            Mat block = img(Range(img.rows - height_corner_block, img.rows), Range(x, x + _block_side_size));
+            _decodeBlock(buf, block);
+        }
+        if(width_corner_block != 0){
+            Mat block = img(Range(img.rows - height_corner_block, img.rows), Range(img.cols - width_corner_block, img.cols));
+            _decodeBlock(buf, block);
+        }
+    }
     return img;
 }
-Scalar Coder::_calcMeanPixValue(const Mat& block){
+void Coder::_encodeBlock(stringstream &buf, const Mat &block) const{
+    if(_isContinuousTone(block)){
+        _writeBlockType(buf, BlockType::SingleTone);
+#ifdef JPEG
+        string data = _jpegEncode(block);
+        int length_block = static_cast<int>(data.length());
+        _writeInt(buf, length_block);
+        buf << data;
+#else
+        Scalar color = _calcMeanPixValue(block);
+        _writeColor(buf, color);
+#endif
+//        copy_img(Range(y, y + _block_side_size), Range(x, x + _block_side_size)) = Scalar(0, 0, 255);
+    }
+    else {
+#ifdef DEFLATE
+        _writeBlockType(buf, BlockType::Rle);
+        string data = _deflateEncode(block);
+        int length_block = static_cast<int>(data.length());
+        _writeInt(buf, length_block);
+        buf << data;
+#else
+        _writeBlockType(buf, BlockType::Rle);
+        string data = _rleEncode(block);
+        int length_block = static_cast<int>(data.length());
+        _writeInt(buf, length_block);
+        buf << data;
+#endif
+    }
+}
+void Coder::_decodeBlock(stringstream &buf, Mat &block) const{
+    BlockType type = _readBlockType(buf);
+    if(type == BlockType::SingleTone){
+#ifdef JPEG
+        int length_block = _readInt(buf);
+        string data = _readData(buf, length_block);
+        _jpegDecode(data, block);
+#else
+        block = _readColor(buf);
+#endif
+    }
+    else {
+#ifdef DEFLATE
+        int length_block = _readInt(buf);
+        string data = _readData(buf, length_block);
+        _deflateDecode(data, block);
+#else
+        int length_block = _readInt(buf);
+        string data = _readData(buf, length_block);
+        _rleDecode(data, block);
+#endif
+    }
+}
+Scalar Coder::_calcMeanPixValue(const Mat& block) const {
     int r_sum = 0;
     int g_sum = 0;
     int b_sum = 0;
@@ -132,7 +163,7 @@ Scalar Coder::_calcMeanPixValue(const Mat& block){
 
     return Scalar(r_mean, g_mean, b_mean);
 }
-bool Coder::_isContinuousTone(const Mat &block){
+bool Coder::_isContinuousTone(const Mat &block) const {
     int channels = block.channels();
     for(int y = 0; y < block.rows - 1; y++)
         for(int x = 0; x < block.cols - 1; x++){
@@ -153,7 +184,7 @@ bool Coder::_isContinuousTone(const Mat &block){
         }
     return true;
 }
-bool Coder::_isContinuousPixel(uchar r1, uchar g1, uchar b1, uchar r2, uchar g2, uchar b2){
+bool Coder::_isContinuousPixel(uchar r1, uchar g1, uchar b1, uchar r2, uchar g2, uchar b2) const {
     if(abs(r1 - r2) < _comp_diff_max &&
             abs(g1 - g2) < _comp_diff_max &&
             abs(b1 - b2) < _comp_diff_max &&
@@ -161,7 +192,7 @@ bool Coder::_isContinuousPixel(uchar r1, uchar g1, uchar b1, uchar r2, uchar g2,
         return true;
     return false;
 }
-void Coder::_writeInt(stringstream& buf, int num){
+void Coder::_writeInt(stringstream& buf, int num) const {
     char _num[4];
     int dec = 255;
     _num[0] = (num >> 24 ) & dec;
@@ -170,7 +201,7 @@ void Coder::_writeInt(stringstream& buf, int num){
     _num[3] = num & dec;
     buf.write(_num, 4);
 }
-int Coder::_readInt(stringstream& buf){
+int Coder::_readInt(stringstream& buf) const {
     char block_data[4];
     buf.read(block_data, 4);
     int num = static_cast<uchar>(block_data[0]);
@@ -182,30 +213,30 @@ int Coder::_readInt(stringstream& buf){
     num |= static_cast<uchar>(block_data[3]);
     return num;
 }
-void Coder::_writeBlockType(stringstream& buf, const BlockType& type){
+void Coder::_writeBlockType(stringstream& buf, const BlockType& type) const {
     char _type[1];
     _type[0] = static_cast<char>(type);
     buf.write(_type, 1);
 }
-BlockType Coder::_readBlockType(stringstream& buf){
+BlockType Coder::_readBlockType(stringstream& buf) const {
     char type[1];
     buf.read(type, 1);
     return static_cast<BlockType>(type[0]);
 }
-void Coder::_writeColor(stringstream& buf, const Scalar& color){
+void Coder::_writeColor(stringstream& buf, const Scalar& color) const {
     char _color[3];
     _color[0] = static_cast<char>(color[0]);
     _color[1] = static_cast<char>(color[1]);
     _color[2] = static_cast<char>(color[2]);
     buf.write(_color, 3);
 }
-Scalar Coder::_readColor(stringstream& buf){
+Scalar Coder::_readColor(stringstream& buf) const {
     char color[3];
     buf.read(color, 3);
 
     return Scalar(static_cast<uchar>(color[0]), static_cast<uchar>(color[1]), static_cast<uchar>(color[2]));
 }
-string Coder::_rleEncode(const Mat& block){
+string Coder::_rleEncode(const Mat& block) const {
     string data;
 
     auto it_cur = block.begin<Vec<uchar, 3>>();
@@ -227,7 +258,7 @@ string Coder::_rleEncode(const Mat& block){
     data.push_back(i);
     return data;
 }
-void Coder::_rleDecode(const string& data, Mat& block){
+void Coder::_rleDecode(const string& data, Mat& block) const {
     auto it_cur = block.begin<Vec<uchar, 3>>();
     auto it_end = block.end<Vec<uchar, 3>>();
 
@@ -238,7 +269,7 @@ void Coder::_rleDecode(const string& data, Mat& block){
             *it_cur = pix;
     }
 }
-string Coder::_readData(stringstream& buf, int length){
+string Coder::_readData(stringstream& buf, int length) const {
     char * _data = new char[length];
     buf.read(_data, length);
     string data(_data, length);
@@ -246,7 +277,7 @@ string Coder::_readData(stringstream& buf, int length){
     _data = nullptr;
     return data;
 }
-void Coder::_writeBlock(stringstream& buf, const Mat& block){
+void Coder::_writeBlock(stringstream& buf, const Mat& block) const {
     auto it_dst = block.begin<Vec<uchar, 3>>();
     auto it_dst_end = block.end<Vec<uchar,3>>();
     for(; it_dst != it_dst_end; ++it_dst){
@@ -258,7 +289,7 @@ void Coder::_writeBlock(stringstream& buf, const Mat& block){
         buf.write(_pix, 3);
     }
 }
-void Coder::_readBlock(stringstream& buf, Mat& block){
+void Coder::_readBlock(stringstream& buf, Mat& block) const {
     auto it_dst = block.begin<Vec<uchar, 3>>();
     auto it_dst_end = block.end<Vec<uchar,3>>();
     for(; it_dst != it_dst_end; ++it_dst){
@@ -267,7 +298,7 @@ void Coder::_readBlock(stringstream& buf, Mat& block){
         *it_dst = Vec<uchar, 3>(pix[0], pix[1], pix[2]);
     }
 }
-string Coder::_jpegEncode(const Mat& block){
+string Coder::_jpegEncode(const Mat& block) const {
     vector<uchar> buf;
 //    vector<int> params;
 //    params.push_back(cv::IMWRITE_JPEG_QUALITY );
@@ -278,7 +309,7 @@ string Coder::_jpegEncode(const Mat& block){
     string data((const char*)buf.data(), buf.size());
     return data;
 }
-void Coder::_jpegDecode(const string& data, Mat& block){
+void Coder::_jpegDecode(const string& data, Mat& block) const {
     std::vector<uchar> buf(data.begin(), data.end());
     cv::Mat decode_block = cv::imdecode(buf, cv::IMREAD_COLOR);
 
@@ -290,7 +321,7 @@ void Coder::_jpegDecode(const string& data, Mat& block){
         *it_dst = *it_src;
     }
 }
-string Coder::_deflateEncode(const Mat& block){
+string Coder::_deflateEncode(const Mat& block) const {
     vector<uchar> buf;
 //    vector<int> params;
 //    params.push_back(cv::IMWRITE_JPEG_QUALITY );
@@ -301,7 +332,7 @@ string Coder::_deflateEncode(const Mat& block){
     string data((const char*)buf.data(), buf.size());
     return data;
 }
-void Coder::_deflateDecode(const string& data, Mat& block){
+void Coder::_deflateDecode(const string& data, Mat& block) const {
     std::vector<uchar> buf(data.begin(), data.end());
     cv::Mat decode_block = cv::imdecode(buf, cv::IMREAD_COLOR);
 
