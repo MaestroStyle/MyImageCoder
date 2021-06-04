@@ -4,9 +4,11 @@
 #include <opencv2/imgproc.hpp>
 #include <opencv2/highgui.hpp>
 
+#include <zlib.h>
+
 #include <sstream>
 
-//#define RESIZE
+#define RESIZE
 #define JPEG
 #define DEFLATE
 

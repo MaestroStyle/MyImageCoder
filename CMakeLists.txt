@@ -14,6 +14,9 @@ find_package(OpenCV REQUIRED PATHS F:/tools/opencv/build)
 include_directories( ${OpenCV_INCLUDE_DIRS} )
 include_directories("include/")
 
+set(ZLIB_HEADERS "F:/Studies_TSU/DataCompression/data_compression/zlib")
+include_directories(${ZLIB_HEADERS})
+
 add_executable(data_compression ${SOURCES} ${HEADERS})
 
-target_link_libraries(data_compression ${OpenCV_LIBS})
+target_link_libraries(data_compression zlibstaticd ${OpenCV_LIBS})

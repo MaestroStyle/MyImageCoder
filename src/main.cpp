@@ -20,7 +20,7 @@ bool imgWrite(const string& filename, const Mat& img);
 
 int main()
 {
-    string fimg_name = "F:/Studies_TSU/DataCompression/data_compression/img.bmp";
+    string fimg_name = "F:/Studies_TSU/DataCompression/data_compression/test32.bmp";
     string fimg_name_res = "F:/Studies_TSU/DataCompression/data_compression/result/res_img.mybmp";
     string fimg_name_decode = "F:/Studies_TSU/DataCompression/data_compression/result/decode_img.bmp";
 
