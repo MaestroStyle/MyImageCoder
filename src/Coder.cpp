@@ -305,29 +305,12 @@ void Coder::_readBlock(stringstream& buf, Mat& block) const {
     }
 }
 string Coder::_jpegEncode(const Mat& block) const {
-    vector<uchar> buf;
+//    vector<uchar> buf;
 //    vector<int> params;
 //    params.push_back(cv::IMWRITE_JPEG_QUALITY );
 //    params.push_back(30);
 
-    imencode(".jpeg", block, buf);//, params);
-
-    string data((const char*)buf.data(), buf.size());
-    return data;
-}
-void Coder::_jpegDecode(const string& data, Mat& block) const {
-    std::vector<uchar> buf(data.begin(), data.end());
-    cv::Mat decode_block = cv::imdecode(buf, cv::IMREAD_COLOR);
-
-    auto it_dst = block.begin<Vec<uchar, 3>>();
-    auto it_dst_end = block.end<Vec<uchar,3>>();
-    auto it_src = decode_block.begin<Vec<uchar, 3>>();
-    auto it_src_end = decode_block.end<Vec<uchar, 3>>();
-    for(; it_dst != it_dst_end || it_src != it_src_end; ++it_dst, ++it_src){
-        *it_dst = *it_src;
-    }
-}
-string Coder::_deflateEncode(const Mat& block) const {
+//    imencode(".jpeg", block, buf);//, params);
     string raw_data;
 
     auto it_cur = block.begin<Vec<uchar, 3>>();
@@ -337,44 +320,88 @@ string Coder::_deflateEncode(const Mat& block) const {
             raw_data.push_back((*it_cur)[1]);
             raw_data.push_back((*it_cur)[2]);
         }
+    int buf_size = 1000;
+    uchar* buf = new uchar[buf_size];
+    jpge::compress_image_to_jpeg_file_in_memory((void*)buf, buf_size, block.cols, block.rows, 3, (const uchar*)raw_data.data());
+#ifdef DEBUG
+    cout << buf_size << endl;
+#endif
 
-    int size_block = static_cast<int>(block.total() * block.elemSize());
-    uchar* comp_data = new uchar[size_block];
-    z_stream defstream;
-    defstream.zalloc = Z_NULL;
-    defstream.zfree = Z_NULL;
-    defstream.opaque = Z_NULL;
+//    string data((const char*)buf.data(), buf.size());
+    string data((const char*)buf, buf_size);
+    delete[] buf;
+    buf = nullptr;
+    return data;
+}
+void Coder::_jpegDecode(const string& data, Mat& block) const {
+//    std::vector<uchar> buf(data.begin(), data.end());
+//    cv::Mat decode_block = cv::imdecode(buf, cv::IMREAD_COLOR);
 
-    defstream.avail_in = (uInt)size_block + 1; // size of input, string + terminator
-    defstream.next_in = (Bytef *)raw_data.data();//block.data; // input char array
-    defstream.avail_out = (uInt)size_block; // size of output
-    defstream.next_out = (Bytef *)comp_data; // output char array
+//    auto it_dst = block.begin<Vec<uchar, 3>>();
+//    auto it_dst_end = block.end<Vec<uchar,3>>();
+//    auto it_src = decode_block.begin<Vec<uchar, 3>>();
+//    auto it_src_end = decode_block.end<Vec<uchar, 3>>();
+//    for(; it_dst != it_dst_end || it_src != it_src_end; ++it_dst, ++it_src){
+//        *it_dst = *it_src;
+//    }
+    int width = 0;
+    int height = 0;
+    int actual_comp = 0;
+    uchar* raw_data = jpgd::decompress_jpeg_image_from_memory((const uchar*)data.data(), data.size(), &width, &height, &actual_comp, 3);
+#ifdef DEBUG
+    cout << "width = " << width << endl;
+    cout << "height = " << height << endl;
+#endif
+    auto it_dst = block.begin<Vec<uchar, 3>>();
+    auto it_dst_end = block.end<Vec<uchar,3>>();
+    for(int i = 0; it_dst != it_dst_end || i < width * height * 3; ++it_dst, i += 3)
+        *it_dst = Vec<uchar, 3>(raw_data[i], raw_data[i + 1], raw_data[i + 2]);
+}
+string Coder::_deflateEncode(const Mat& block) const {
+    string raw_data;
+    auto it_cur = block.begin<Vec<uchar, 3>>();
+    auto it_end = block.end<Vec<uchar,3>>();
+    for(; it_cur != it_end; ++it_cur){
+            raw_data.push_back((*it_cur)[0]);
+            raw_data.push_back((*it_cur)[1]);
+            raw_data.push_back((*it_cur)[2]);
+        }
 
-    deflateInit(&defstream, Z_BEST_COMPRESSION);
-    deflate(&defstream, Z_FINISH);
-    deflateEnd(&defstream);
-    string data((const char*)comp_data, strlen((const char*)comp_data));
+    int comp_buf_size = compressBound(block.total() * block.elemSize());
+    Bytef* comp_data = new Bytef[comp_buf_size];
+
+    uLongf comp_size;
+    compress(comp_data, &comp_size, (const Bytef*)raw_data.data(), raw_data.size());
+#ifdef DEBUG
+    cout << endl << "raw data: ";
+    for(int i =0 ; i < block.total() * block.elemSize(); i++)
+        cout << raw_d[i];
+    cout << endl << "comp data: ";
+    for(int i =0 ; i < comp_size; i++)
+        cout << comp_data[i];
+    cout << endl << "comp size: " << comp_size << endl;
+#endif
+
+    string data((const char*)comp_data, comp_size);
+
     delete[] comp_data;
     comp_data = nullptr;
     return data;
 }
 void Coder::_deflateDecode(const string& data, Mat& block) const {
-    z_stream infstream;
-    infstream.zalloc = Z_NULL;
-    infstream.zfree = Z_NULL;
-    infstream.opaque = Z_NULL;
+#ifdef DEBUG
+    cout << endl;
+    for(int i =0 ; i < data.size(); i++)
+        cout << data.data()[i];
+#endif
 
     int size_block = static_cast<int>(block.total() * block.elemSize());
-    uchar* decode_data = new uchar[size_block];
-    infstream.avail_in = (uInt)data.length(); // size of input
-    infstream.next_in = (Bytef *)data.data(); // input char array
-    infstream.avail_out = (uInt)size_block; // size of output
-    infstream.next_out = (Bytef *)decode_data; // output char array
-
-    // the actual DE-compression work.
-    inflateInit(&infstream);
-    inflate(&infstream, Z_NO_FLUSH);
-    inflateEnd(&infstream);
+    Bytef* decode_data = new Bytef[size_block];
+    uLongf decomp_size;
+    uncompress(decode_data, &decomp_size, (const Bytef*)data.data(), data.size());
+#ifdef DEBUG
+    cout << decomp_size << endl;
+#endif
 
     auto it_dst = block.begin<Vec<uchar, 3>>();
     auto it_dst_end = block.end<Vec<uchar,3>>();

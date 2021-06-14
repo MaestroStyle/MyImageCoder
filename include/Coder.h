@@ -5,13 +5,15 @@
 #include <opencv2/highgui.hpp>
 
 #include <zlib.h>
+#include <jpgd.h>
+#include <jpge.h>
 
 #include <sstream>
 
-#define RESIZE
-#define JPEG
-#define DEFLATE
-#define DEBUG
+//#define JPEG
+//#define DEFLATE
+//#define RESIZE
+//#define DEBUG
 
 using namespace std;
 using namespace cv;
@@ -27,9 +29,8 @@ enum class BlockType : char {
 class Coder{
 
 public:
-    Coder(int bloc_size = 16, int comp_diff_max = 5, int diff_max = 5);
+    Coder(int block_size = 8, int comp_diff_max = 5, int diff_max = 5);
 
-//    vector<char> rleEncode();
     string encode(const Mat& img) const;
     Mat decode(const string& comp_data) const;
 
