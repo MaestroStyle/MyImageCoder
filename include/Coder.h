@@ -11,6 +11,7 @@
 #define RESIZE
 #define JPEG
 #define DEFLATE
+#define DEBUG
 
 using namespace std;
 using namespace cv;

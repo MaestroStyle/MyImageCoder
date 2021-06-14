@@ -33,7 +33,9 @@ string Coder::encode(const Mat& img) const {
 
     int width_corner_block = img.cols % _block_side_size;
     int height_corner_block = img.rows % _block_side_size;
-//    Mat copy_img = img.clone();
+#ifdef DEBUG
+    Mat copy_img = img.clone();
+#endif
     for(int y = 0; y <= img.rows - _block_side_size; y += _block_side_size){
         for(int x = 0; x <= img.cols - _block_side_size; x += _block_side_size){
             Mat block = img(Range(y, y + _block_side_size), Range(x, x + _block_side_size));
@@ -54,12 +56,14 @@ string Coder::encode(const Mat& img) const {
             _encodeBlock(buf, block);
         }
     }
-//#ifdef RESIZE
-//    resize(copy_img, copy_img,Size(200, 200), 0, 0, INTER_AREA);
-//#endif
-//    imshow("continuous blocks", copy_img);
-//    waitKey();
-//    destroyAllWindows();
+#ifdef DEBUG
+#ifdef RESIZE
+    resize(copy_img, copy_img,Size(200, 200), 0, 0, INTER_AREA);
+#endif
+    imshow("continuous blocks", copy_img);
+    waitKey();
+    destroyAllWindows();
+#endif
     return buf.str();
 }
 Mat Coder::decode(const string& comp_data) const {
@@ -104,7 +108,9 @@ void Coder::_encodeBlock(stringstream &buf, const Mat &block) const{
         Scalar color = _calcMeanPixValue(block);
         _writeColor(buf, color);
 #endif
+#ifdef DEBUG
 //        copy_img(Range(y, y + _block_side_size), Range(x, x + _block_side_size)) = Scalar(0, 0, 255);
+#endif
     }
     else {
 #ifdef DEFLATE
@@ -322,14 +328,16 @@ void Coder::_jpegDecode(const string& data, Mat& block) const {
     }
 }
 string Coder::_deflateEncode(const Mat& block) const {
-//    vector<uchar> buf;
-////    vector<int> params;
-////    params.push_back(cv::IMWRITE_JPEG_QUALITY );
-////    params.push_back(30);
+    string raw_data;
 
-//    imencode(".png", block, buf);//, params);
+    auto it_cur = block.begin<Vec<uchar, 3>>();
+    auto it_end = block.end<Vec<uchar,3>>();
+    for(; it_cur != it_end; ++it_cur){
+            raw_data.push_back((*it_cur)[0]);
+            raw_data.push_back((*it_cur)[1]);
+            raw_data.push_back((*it_cur)[2]);
+        }
 
-//    string data((const char*)buf.data(), buf.size());
     int size_block = static_cast<int>(block.total() * block.elemSize());
     uchar* comp_data = new uchar[size_block];
     z_stream defstream;
@@ -338,7 +346,7 @@ string Coder::_deflateEncode(const Mat& block) const {
     defstream.opaque = Z_NULL;
 
     defstream.avail_in = (uInt)size_block + 1; // size of input, string + terminator
-    defstream.next_in = (Bytef *)block.data; // input char array
+    defstream.next_in = (Bytef *)raw_data.data();//block.data; // input char array
     defstream.avail_out = (uInt)size_block; // size of output
     defstream.next_out = (Bytef *)comp_data; // output char array
 
@@ -351,8 +359,6 @@ string Coder::_deflateEncode(const Mat& block) const {
     return data;
 }
 void Coder::_deflateDecode(const string& data, Mat& block) const {
-//    std::vector<uchar> buf(data.begin(), data.end());
-//    cv::Mat decode_block = cv::imdecode(buf, cv::IMREAD_COLOR);
     z_stream infstream;
     infstream.zalloc = Z_NULL;
     infstream.zfree = Z_NULL;
